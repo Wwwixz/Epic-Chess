@@ -1,9 +1,65 @@
 import arcade
 import random
+from arcade.gui import UIManager, UIAnchorLayout, UIBoxLayout, UIFlatButton
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 SCREEN_TITLE = "Epic Chess"
+
+
+class MainMenu(arcade.Window):
+    def __init__(self):
+        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+
+        self.manager = UIManager()
+        self.manager.enable()
+
+        self.anchor_layout = UIAnchorLayout()
+        self.box_layout = UIBoxLayout(vertical=True, space_between=10)
+
+        self.setup_widgets()
+
+        self.anchor_layout.add(self.box_layout)
+        self.manager.add(self.anchor_layout)
+
+    def setup_widgets(self):
+        start_button = UIFlatButton(text="Играть", width=200, height=50)
+        start_button.on_click = self.on_start_click
+
+        exit_button = UIFlatButton(text="Выход", width=200, height=50)
+        exit_button.on_click = self.on_exit_click
+
+        self.box_layout.add(start_button)
+        self.box_layout.add(exit_button)
+
+    def on_start_click(self, event):
+        self.close()
+        game = Epic_Chess()
+        arcade.run()
+
+    def on_exit_click(self, event):
+        arcade.close_window()
+
+    def on_draw(self):
+        self.clear()
+
+        arcade.draw_text("EPIC CHESS", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 80, arcade.color.DARK_BLUE,
+                         48, anchor_x="center", bold=True)
+
+        arcade.draw_text("Управление в игре:", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 110, arcade.color.DARK_GRAY,
+                         24, anchor_x="center")
+
+        arcade.draw_text("Стрелки - движение", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 150, arcade.color.DARK_GRAY,
+                         18, anchor_x="center")
+
+        arcade.draw_text("Пробел - атака", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 170, arcade.color.DARK_GRAY,
+                         18, anchor_x="center")
+
+        arcade.draw_text("R - рестарт, ESC - выход", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 190, arcade.color.DARK_GRAY,
+                         18, anchor_x="center")
+
+        self.manager.draw()
+
 
 class Epic_Chess(arcade.Window):
     def __init__(self):
@@ -205,7 +261,7 @@ class Epic_Chess(arcade.Window):
         ]
 
 def main():
-    game = Epic_Chess()
+    menu = MainMenu()
     arcade.run()
 
 if __name__ == "__main__":
