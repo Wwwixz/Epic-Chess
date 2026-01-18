@@ -1,5 +1,8 @@
 import arcade
+import math
+import random
 from arcade.gui import UIManager, UIAnchorLayout, UIBoxLayout, UIFlatButton
+from datetime import datetime
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -21,6 +24,8 @@ class MainMenu(arcade.Window):
         self.anchor_layout.add(self.box_layout)
         self.manager.add(self.anchor_layout)
 
+        self.game_start_time = None
+
     def setup_widgets(self):
         start_button = UIFlatButton(text="Играть", width=200, height=50)
         start_button.on_click = self.on_start_click
@@ -33,7 +38,9 @@ class MainMenu(arcade.Window):
 
     def on_start_click(self, event):
         self.close()
-        game = Epic_Chess()
+        self.game_start_time = datetime.now()
+        game = Level1(self.game_start_time)
+        game.setup()
         arcade.run()
 
     def on_exit_click(self, event):
@@ -60,10 +67,15 @@ class MainMenu(arcade.Window):
         self.manager.draw()
 
 
-class Epic_Chess(arcade.Window):
-    def __init__(self):
+class Level1(arcade.Window):
+    def __init__(self, start_time):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
 
+        self.start_time = start_time
+        self.final_time = None
+        self.game_paused = False
+        self.game_ended = False
+        self.level = 1
         self.player_x = 400
         self.player_y = 300
         self.player_size = 30
@@ -71,21 +83,56 @@ class Epic_Chess(arcade.Window):
         self.player_max_hp = 100
 
         self.monsters = [
-            {"x": 200, "y": 300, "alive": True, "size": 25, "hp": 80, "max_hp": 80, "attack_timer": 0},
-            {"x": 600, "y": 300, "alive": True, "size": 25, "hp": 80, "max_hp": 80, "attack_timer": 0},
-            {"x": 400, "y": 100, "alive": True, "size": 25, "hp": 80, "max_hp": 80, "attack_timer": 0},
-            {"x": 400, "y": 500, "alive": True, "size": 25, "hp": 80, "max_hp": 80, "attack_timer": 0},
+            {"x": 200, "y": 300, "alive": True, "size": 25, "hp": 80, "attack_timer": 0},
+            {"x": 600, "y": 300, "alive": True, "size": 25, "hp": 80, "attack_timer": 0},
+            {"x": 400, "y": 100, "alive": True, "size": 25, "hp": 80, "attack_timer": 0},
+            {"x": 400, "y": 500, "alive": True, "size": 25, "hp": 80, "attack_timer": 0},
         ]
+        self.total_monsters = 4
 
         self.kills = 0
         self.frame_count = 0
+        self.teleport_active = False
+        self.teleport_x = 100
+        self.teleport_y = 100
+        self.teleport_size = 40
+        self.teleport_animation = 0
 
         self.up_pressed = False
         self.down_pressed = False
         self.left_pressed = False
         self.right_pressed = False
 
+        self.chits_1 = False
+        self.hart = 15
+
+    def setup(self):
         arcade.set_background_color(arcade.color.LIGHT_GRAY)
+
+    def spawn_teleport(self):
+        possible_locations = [
+            (100, 100),
+            (SCREEN_WIDTH - 100, 100),
+            (100, SCREEN_HEIGHT - 100),
+            (SCREEN_WIDTH - 100, SCREEN_HEIGHT - 100),
+            (SCREEN_WIDTH // 2, 100),
+            (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100),
+            (100, SCREEN_HEIGHT // 2),
+            (SCREEN_WIDTH - 100, SCREEN_HEIGHT // 2),
+        ]
+
+        farthest_location = possible_locations[0]
+        max_distance = 0
+
+        for loc_x, loc_y in possible_locations:
+            distance = ((self.player_x - loc_x) ** 2 + (self.player_y - loc_y) ** 2) ** 0.5
+            if distance > max_distance:
+                max_distance = distance
+                farthest_location = (loc_x, loc_y)
+
+        self.teleport_x, self.teleport_y = farthest_location
+        self.teleport_active = True
+        self.teleport_animation = 0
 
     def on_draw(self):
         self.clear()
@@ -122,6 +169,23 @@ class Epic_Chess(arcade.Window):
                     ]
                     arcade.draw_polygon_filled(hp_points, arcade.color.GREEN)
 
+        if self.teleport_active:
+            self.teleport_animation += 1
+            pulse = abs(20 * (self.teleport_animation % 60 - 30) / 30)
+
+            arcade.draw_circle_filled(self.teleport_x, self.teleport_y, self.teleport_size + pulse,
+                                      arcade.color.PURPLE)
+            arcade.draw_circle_outline(self.teleport_x, self.teleport_y, self.teleport_size + pulse + 5,
+                                       arcade.color.BLACK, 3)
+
+            for i in range(8):
+                angle = self.teleport_animation * 0.1 + i * math.pi / 4
+                x1 = self.teleport_x + (self.teleport_size + pulse) * math.cos(angle)
+                y1 = self.teleport_y + (self.teleport_size + pulse) * math.sin(angle)
+                x2 = self.teleport_x + (self.teleport_size + pulse + 15) * math.cos(angle)
+                y2 = self.teleport_y + (self.teleport_size + pulse + 15) * math.sin(angle)
+                arcade.draw_line(x1, y1, x2, y2, arcade.color.YELLOW, 3)
+
         hp_width = 200 * (self.player_hp / self.player_max_hp)
         hp_points = [
             (20, SCREEN_HEIGHT - 40),
@@ -132,16 +196,33 @@ class Epic_Chess(arcade.Window):
         arcade.draw_polygon_filled(hp_points, arcade.color.RED)
         arcade.draw_polygon_outline(hp_points, arcade.color.BLACK, 2)
 
+        if not self.game_ended:
+            current_time = datetime.now()
+            elapsed = current_time - self.start_time
+            elapsed_str = str(elapsed).split('.')[0]
+        else:
+            if self.final_time:
+                elapsed_str = str(self.final_time).split('.')[0]
+            else:
+                elapsed_str = "00:00:00"
+
+        arcade.draw_text(f"Время: {elapsed_str}", 20, SCREEN_HEIGHT - 220, arcade.color.BLACK, 16)
         arcade.draw_text(f"HP: {int(self.player_hp)}/{self.player_max_hp}", 20, SCREEN_HEIGHT - 60,
                          arcade.color.BLACK, 18)
-        arcade.draw_text(f"Убито: {self.kills}/4", 20, SCREEN_HEIGHT - 90,
+        arcade.draw_text(f"Убито: {self.kills}/{self.total_monsters}", 20, SCREEN_HEIGHT - 90,
                          arcade.color.BLACK, 18)
-        arcade.draw_text("Стрелки - двигаться", 20, SCREEN_HEIGHT - 120,
+        arcade.draw_text(f"Уровень: {self.level}", 20, SCREEN_HEIGHT - 115,
+                         arcade.color.BLACK, 18)
+        arcade.draw_text("Стрелки - двигаться", 20, SCREEN_HEIGHT - 140,
                          arcade.color.BLACK, 16)
-        arcade.draw_text("Пробел - атаковать", 20, SCREEN_HEIGHT - 145,
+        arcade.draw_text("Пробел - атаковать", 20, SCREEN_HEIGHT - 165,
                          arcade.color.BLACK, 16)
-        arcade.draw_text("R - рестарт", 20, SCREEN_HEIGHT - 170,
+        arcade.draw_text("R - рестарт", 20, SCREEN_HEIGHT - 190,
                          arcade.color.BLACK, 16)
+
+        if self.teleport_active:
+            arcade.draw_text("Подойдите к телепорту", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40,
+                             arcade.color.PURPLE, 24, anchor_x="center")
 
         if self.player_hp <= 0:
             text_bg_points = [
@@ -155,21 +236,41 @@ class Epic_Chess(arcade.Window):
                              arcade.color.RED, 36, anchor_x="center")
             arcade.draw_text(f"Убито монстров: {self.kills}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
                              arcade.color.WHITE, 24, anchor_x="center")
-            arcade.draw_text("R - начать заново", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50,
+            arcade.draw_text(f"Время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 45,
+                             arcade.color.WHITE, 20, anchor_x="center")
+            arcade.draw_text("R - начать заново", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 70,
                              arcade.color.YELLOW, 20, anchor_x="center")
 
-        elif self.kills == 4:
-            text_bg_points = [
-                (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 50),
-                (SCREEN_WIDTH // 2 + 150, SCREEN_HEIGHT // 2 - 50),
-                (SCREEN_WIDTH // 2 + 150, SCREEN_HEIGHT // 2 + 50),
-                (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 + 50),
+        if self.game_paused:
+            pause_bg_points = [
+                (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 80),
+                (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 - 80),
+                (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 + 80),
+                (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + 80),
             ]
-            arcade.draw_polygon_filled(text_bg_points, arcade.color.BLACK)
-            arcade.draw_text("ПОБЕДА!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2,
-                             arcade.color.GOLD, 36, anchor_x="center")
+            arcade.draw_polygon_filled(pause_bg_points, (0, 0, 0, 200))
+            arcade.draw_text("ИГРА ПРИОСТАНОВЛЕНА", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30,
+                             arcade.color.WHITE, 32, anchor_x="center")
+            arcade.draw_text("P - продолжить", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30,
+                             arcade.color.YELLOW, 24, anchor_x="center")
 
     def on_key_press(self, key, modifiers):
+        if key == arcade.key.P:
+            self.game_paused = not self.game_paused
+            return
+
+        if key == arcade.key.C:
+            if self.chits_1 == False:
+                self.chits_1 = True
+                self.hart *= 5
+            else:
+                self.chits_1 = False
+                self.hart //= 5
+            return
+
+        if self.game_paused:
+            return
+
         if self.player_hp <= 0:
             if key == arcade.key.R:
                 self.restart_game()
@@ -183,20 +284,17 @@ class Epic_Chess(arcade.Window):
             self.left_pressed = True
         elif key == arcade.key.RIGHT:
             self.right_pressed = True
-
         elif key == arcade.key.SPACE:
             self.player_attack()
-
         elif key == arcade.key.R:
             self.restart_game()
-
         elif key == arcade.key.ESCAPE:
             arcade.close_window()
 
-        self.player_x = max(self.player_size, min(SCREEN_WIDTH - self.player_size, self.player_x))
-        self.player_y = max(self.player_size, min(SCREEN_HEIGHT - self.player_size, self.player_y))
-
     def on_key_release(self, key, modifiers):
+        if self.game_paused:
+            return
+
         if key == arcade.key.UP:
             self.up_pressed = False
         elif key == arcade.key.DOWN:
@@ -217,10 +315,16 @@ class Epic_Chess(arcade.Window):
             distance_y = abs(self.player_y - monster["y"])
 
             if distance_x < attack_range and distance_y < attack_range:
-                monster["hp"] -= 15
+                monster["hp"] -= self.hart
                 if monster["hp"] <= 0:
                     monster["alive"] = False
                     self.kills += 1
+                    self.check_teleport_spawn()
+
+    def check_teleport_spawn(self):
+        all_dead = all(not monster["alive"] for monster in self.monsters)
+        if all_dead and not self.teleport_active:
+            self.spawn_teleport()
 
     def update_monsters(self):
         move_speed = 2
@@ -273,9 +377,15 @@ class Epic_Chess(arcade.Window):
                 monster["attack_timer"] -= 1
 
     def on_update(self, delta_time):
+        if self.game_paused or self.game_ended:
+            return
+
         self.frame_count += 1
 
-        if self.player_hp <= 0 or self.kills == 4:
+        if self.player_hp <= 0:
+            if not self.final_time:
+                self.final_time = datetime.now() - self.start_time
+                self.game_ended = True
             return
 
         speed = 8
@@ -291,15 +401,39 @@ class Epic_Chess(arcade.Window):
         self.player_x = max(self.player_size, min(SCREEN_WIDTH - self.player_size, self.player_x))
         self.player_y = max(self.player_size, min(SCREEN_HEIGHT - self.player_size, self.player_y))
 
-        self.update_monsters()
+        if not self.teleport_active:
+            self.update_monsters()
+        else:
+            distance_to_teleport = ((self.player_x - self.teleport_x) ** 2 +
+                                    (self.player_y - self.teleport_y) ** 2) ** 0.5
+            if distance_to_teleport < self.teleport_size + self.player_size:
+                self.go_to_level2()
 
+    def go_to_level2(self):
+        self.final_time = datetime.now() - self.start_time
+        self.game_ended = True
+        self.close()
+        level2 = Level2(self.start_time)
+        level2.setup()
+        arcade.run()
 
     def restart_game(self):
+        self.game_ended = False
+        self.game_paused = False
+        self.start_time = datetime.now()
+        self.final_time = None
         self.player_x = 400
         self.player_y = 300
         self.player_hp = 100
         self.kills = 0
         self.frame_count = 0
+        self.teleport_active = False
+        self.teleport_animation = 0
+
+        self.up_pressed = False
+        self.down_pressed = False
+        self.left_pressed = False
+        self.right_pressed = False
 
         self.monsters = [
             {"x": 200, "y": 300, "alive": True, "size": 25, "hp": 80, "attack_timer": 0},
@@ -308,14 +442,1015 @@ class Epic_Chess(arcade.Window):
             {"x": 400, "y": 500, "alive": True, "size": 25, "hp": 80, "attack_timer": 0},
         ]
 
+
+class Level2(arcade.Window):
+    def __init__(self, start_time):
+        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+
+        self.start_time = start_time
+        self.final_time = None
+        self.game_paused = False
+        self.game_ended = False
+        self.level = 2
+        self.player_x = 400
+        self.player_y = 300
+        self.player_size = 30
+        self.player_hp = 100
+        self.player_max_hp = 100
+
+        self.chits_1 = False
+        self.hart = 15
+
+        self.monsters = [
+            {"x": 150, "y": 150, "alive": True, "size": 30, "hp": 120, "attack_timer": 0},
+            {"x": 650, "y": 150, "alive": True, "size": 30, "hp": 120, "attack_timer": 0},
+            {"x": 150, "y": 450, "alive": True, "size": 30, "hp": 120, "attack_timer": 0},
+            {"x": 650, "y": 450, "alive": True, "size": 30, "hp": 120, "attack_timer": 0},
+            {"x": 400, "y": 300, "alive": True, "size": 35, "hp": 150, "attack_timer": 0},
+        ]
+        self.total_monsters = 5
+
+        self.kills = 0
+        self.frame_count = 0
+        self.teleport_active = False
+        self.teleport_x = 100
+        self.teleport_y = 100
+        self.teleport_size = 40
+        self.teleport_animation = 0
+
         self.up_pressed = False
         self.down_pressed = False
         self.left_pressed = False
         self.right_pressed = False
 
+    def setup(self):
+        arcade.set_background_color(arcade.color.DARK_SLATE_GRAY)
+
+    def spawn_teleport(self):
+        possible_locations = [
+            (100, 100),
+            (SCREEN_WIDTH - 100, 100),
+            (100, SCREEN_HEIGHT - 100),
+            (SCREEN_WIDTH - 100, SCREEN_HEIGHT - 100),
+        ]
+
+        self.teleport_x, self.teleport_y = random.choice(possible_locations)
+        self.teleport_active = True
+        self.teleport_animation = 0
+
+    def on_draw(self):
+        self.clear()
+
+        bg_points = [
+            (0, 0), (SCREEN_WIDTH, 0),
+            (SCREEN_WIDTH, SCREEN_HEIGHT), (0, SCREEN_HEIGHT)
+        ]
+        arcade.draw_polygon_filled(bg_points, arcade.color.DARK_SLATE_GRAY)
+
+        half = self.player_size / 2
+        points = [
+            (self.player_x - half, self.player_y - half),
+            (self.player_x + half, self.player_y - half),
+            (self.player_x + half, self.player_y + half),
+            (self.player_x - half, self.player_y + half),
+        ]
+        arcade.draw_polygon_filled(points, arcade.color.GREEN)
+
+        for monster in self.monsters:
+            if monster["alive"]:
+                half_size = monster["size"] / 2
+                monster_points = [
+                    (monster["x"] - half_size, monster["y"] - half_size),
+                    (monster["x"] + half_size, monster["y"] - half_size),
+                    (monster["x"] + half_size, monster["y"] + half_size),
+                    (monster["x"] - half_size, monster["y"] + half_size),
+                ]
+
+                color = arcade.color.ORANGE if monster["attack_timer"] > 50 else arcade.color.RED
+                arcade.draw_polygon_filled(monster_points, color)
+
+                max_hp = 120 if monster["size"] == 30 else 150
+                if monster["hp"] < max_hp:
+                    hp_width = monster["size"] * (monster["hp"] / max_hp)
+                    hp_points = [
+                        (monster["x"] - monster["size"] / 2, monster["y"] + monster["size"] / 2 + 5),
+                        (monster["x"] - monster["size"] / 2 + hp_width, monster["y"] + monster["size"] / 2 + 5),
+                        (monster["x"] - monster["size"] / 2 + hp_width, monster["y"] + monster["size"] / 2 + 10),
+                        (monster["x"] - monster["size"] / 2, monster["y"] + monster["size"] / 2 + 10),
+                    ]
+                    arcade.draw_polygon_filled(hp_points, arcade.color.GREEN)
+
+        if self.teleport_active:
+            self.teleport_animation += 1
+            pulse = abs(20 * (self.teleport_animation % 60 - 30) / 30)
+
+            arcade.draw_circle_filled(self.teleport_x, self.teleport_y, self.teleport_size + pulse,
+                                      arcade.color.PURPLE)
+            arcade.draw_circle_outline(self.teleport_x, self.teleport_y, self.teleport_size + pulse + 5,
+                                       arcade.color.BLACK, 3)
+
+            for i in range(8):
+                angle = self.teleport_animation * 0.1 + i * math.pi / 4
+                x1 = self.teleport_x + (self.teleport_size + pulse) * math.cos(angle)
+                y1 = self.teleport_y + (self.teleport_size + pulse) * math.sin(angle)
+                x2 = self.teleport_x + (self.teleport_size + pulse + 15) * math.cos(angle)
+                y2 = self.teleport_y + (self.teleport_size + pulse + 15) * math.sin(angle)
+                arcade.draw_line(x1, y1, x2, y2, arcade.color.YELLOW, 3)
+
+        hp_width = 200 * (self.player_hp / self.player_max_hp)
+        hp_points = [
+            (20, SCREEN_HEIGHT - 40),
+            (20 + hp_width, SCREEN_HEIGHT - 40),
+            (20 + hp_width, SCREEN_HEIGHT - 20),
+            (20, SCREEN_HEIGHT - 20),
+        ]
+        arcade.draw_polygon_filled(hp_points, arcade.color.RED)
+        arcade.draw_polygon_outline(hp_points, arcade.color.BLACK, 2)
+
+        if not self.game_ended:
+            current_time = datetime.now()
+            elapsed = current_time - self.start_time
+            elapsed_str = str(elapsed).split('.')[0]
+        else:
+            if self.final_time:
+                elapsed_str = str(self.final_time).split('.')[0]
+            else:
+                elapsed_str = "00:00:00"
+
+        arcade.draw_text(f"Время: {elapsed_str}", 20, SCREEN_HEIGHT - 220, arcade.color.WHITE, 16)
+        arcade.draw_text(f"HP: {int(self.player_hp)}/{self.player_max_hp}", 20, SCREEN_HEIGHT - 60,
+                         arcade.color.WHITE, 18)
+        arcade.draw_text(f"Убито: {self.kills}/{self.total_monsters}", 20, SCREEN_HEIGHT - 90,
+                         arcade.color.WHITE, 18)
+        arcade.draw_text(f"Уровень: {self.level}", 20, SCREEN_HEIGHT - 115,
+                         arcade.color.WHITE, 18)
+        arcade.draw_text("Стрелки - двигаться", 20, SCREEN_HEIGHT - 140,
+                         arcade.color.WHITE, 16)
+        arcade.draw_text("Пробел - атаковать", 20, SCREEN_HEIGHT - 165,
+                         arcade.color.WHITE, 16)
+        arcade.draw_text("R - рестарт", 20, SCREEN_HEIGHT - 190,
+                         arcade.color.WHITE, 16)
+
+        if self.teleport_active:
+            arcade.draw_text("Подойдите к телепорту", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40,
+                             arcade.color.PURPLE, 24, anchor_x="center")
+
+        if self.player_hp <= 0:
+            text_bg_points = [
+                (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 60),
+                (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 - 60),
+                (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 + 60),
+                (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + 60),
+            ]
+            arcade.draw_polygon_filled(text_bg_points, arcade.color.BLACK)
+            arcade.draw_text("ВЫ ПРОИГРАЛИ!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20,
+                             arcade.color.RED, 36, anchor_x="center")
+            arcade.draw_text(f"Убито монстров: {self.kills}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
+                             arcade.color.WHITE, 24, anchor_x="center")
+            arcade.draw_text(f"Время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 45,
+                             arcade.color.WHITE, 20, anchor_x="center")
+            arcade.draw_text("R - начать заново", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 70,
+                             arcade.color.YELLOW, 20, anchor_x="center")
+
+        if self.game_paused:
+            pause_bg_points = [
+                (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 80),
+                (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 - 80),
+                (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 + 80),
+                (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + 80),
+            ]
+            arcade.draw_polygon_filled(pause_bg_points, (0, 0, 0, 200))
+            arcade.draw_text("ИГРА ПРИОСТАНОВЛЕНА", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30,
+                             arcade.color.WHITE, 32, anchor_x="center")
+            arcade.draw_text("P - продолжить", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30,
+                             arcade.color.YELLOW, 24, anchor_x="center")
+
+        if self.teleport_active and all(not monster["alive"] for monster in self.monsters):
+            distance_to_teleport = ((self.player_x - self.teleport_x) ** 2 +
+                                    (self.player_y - self.teleport_y) ** 2) ** 0.5
+            if distance_to_teleport < self.teleport_size + self.player_size:
+                self.show_victory()
+
+    def show_victory(self):
+        if not self.final_time:
+            self.final_time = datetime.now() - self.start_time
+            self.game_ended = True
+
+        text_bg_points = [
+            (SCREEN_WIDTH // 2 - 250, SCREEN_HEIGHT // 2 - 100),
+            (SCREEN_WIDTH // 2 + 250, SCREEN_HEIGHT // 2 - 100),
+            (SCREEN_WIDTH // 2 + 250, SCREEN_HEIGHT // 2 + 100),
+            (SCREEN_WIDTH // 2 - 250, SCREEN_HEIGHT // 2 + 100),
+        ]
+        arcade.draw_polygon_filled(text_bg_points, arcade.color.DARK_BLUE)
+        arcade.draw_polygon_outline(text_bg_points, arcade.color.GOLD, 3)
+
+        arcade.draw_text("ПОБЕДА!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50,
+                         arcade.color.GOLD, 48, anchor_x="center", bold=True)
+        arcade.draw_text("Нажмите SPACE для финального босса", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2,
+                         arcade.color.WHITE, 28, anchor_x="center")
+
+        if self.final_time:
+            elapsed_str = str(self.final_time).split('.')[0]
+        else:
+            elapsed_str = "00:00:00"
+
+        arcade.draw_text(f"Общее время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 40,
+                         arcade.color.YELLOW, 24, anchor_x="center")
+        arcade.draw_text("R - начать заново", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80,
+                         arcade.color.GREEN, 22, anchor_x="center")
+
+    def on_key_press(self, key, modifiers):
+        if key == arcade.key.P:
+            self.game_paused = not self.game_paused
+            return
+
+        if key == arcade.key.C:
+            if self.chits_1 == False:
+                self.chits_1 = True
+                self.hart *= 5
+            else:
+                self.chits_1 = False
+                self.hart //= 5
+            return
+
+        if self.game_paused:
+            return
+
+        if self.player_hp <= 0 or self.game_ended:
+            if key == arcade.key.R:
+                self.restart_game()
+            elif key == arcade.key.SPACE and self.game_ended and all(not monster["alive"] for monster in self.monsters):
+                # Переход к финальному боссу
+                self.close()
+                boss_fight = BossFight(self.start_time)
+                boss_fight.setup()
+                boss_fight.center_window()
+                arcade.run()
+            return
+
+        if key == arcade.key.UP:
+            self.up_pressed = True
+        elif key == arcade.key.DOWN:
+            self.down_pressed = True
+        elif key == arcade.key.LEFT:
+            self.left_pressed = True
+        elif key == arcade.key.RIGHT:
+            self.right_pressed = True
+        elif key == arcade.key.SPACE:
+            self.player_attack()
+        elif key == arcade.key.R:
+            self.restart_game()
+        elif key == arcade.key.ESCAPE:
+            arcade.close_window()
+
+    def on_key_release(self, key, modifiers):
+        if self.game_paused:
+            return
+
+        if key == arcade.key.UP:
+            self.up_pressed = False
+        elif key == arcade.key.DOWN:
+            self.down_pressed = False
+        elif key == arcade.key.LEFT:
+            self.left_pressed = False
+        elif key == arcade.key.RIGHT:
+            self.right_pressed = False
+
+    def player_attack(self):
+        attack_range = 60
+
+        for monster in self.monsters:
+            if not monster["alive"]:
+                continue
+
+            distance_x = abs(self.player_x - monster["x"])
+            distance_y = abs(self.player_y - monster["y"])
+
+            if distance_x < attack_range and distance_y < attack_range:
+                monster["hp"] -= self.hart
+                if monster["hp"] <= 0:
+                    monster["alive"] = False
+                    self.kills += 1
+                    self.check_teleport_spawn()
+
+    def check_teleport_spawn(self):
+        all_dead = all(not monster["alive"] for monster in self.monsters)
+        if all_dead and not self.teleport_active:
+            self.spawn_teleport()
+
+    def update_monsters(self):
+        move_speed = 2.5
+        min_distance = 50
+
+        for i, monster in enumerate(self.monsters):
+            if not monster["alive"]:
+                continue
+
+            target_x = self.player_x
+            target_y = self.player_y
+
+            for j, other in enumerate(self.monsters):
+                if i == j or not other["alive"]:
+                    continue
+
+                dx = monster["x"] - other["x"]
+                dy = monster["y"] - other["y"]
+                distance = (dx ** 2 + dy ** 2) ** 0.5
+
+                if distance < min_distance:
+                    if distance == 0:
+                        distance = 0.001
+                    repel_force = (min_distance - distance) / min_distance
+                    target_x += dx / distance * repel_force * 50
+                    target_y += dy / distance * repel_force * 50
+
+            if monster["x"] < target_x:
+                monster["x"] += move_speed
+            elif monster["x"] > target_x:
+                monster["x"] -= move_speed
+
+            if monster["y"] < target_y:
+                monster["y"] += move_speed
+            elif monster["y"] > target_y:
+                monster["y"] -= move_speed
+
+            monster["x"] = max(monster["size"], min(SCREEN_WIDTH - monster["size"], monster["x"]))
+            monster["y"] = max(monster["size"], min(SCREEN_HEIGHT - monster["size"], monster["y"]))
+
+            if monster["attack_timer"] <= 0 and self.player_hp > 0:
+                distance_x = abs(self.player_x - monster["x"])
+                distance_y = abs(self.player_y - monster["y"])
+
+                if distance_x < 50 and distance_y < 50:
+                    self.player_hp -= 8
+                    monster["attack_timer"] = 90
+
+            if monster["attack_timer"] > 0:
+                monster["attack_timer"] -= 1
+
+    def on_update(self, delta_time):
+        if self.game_paused or self.game_ended:
+            return
+
+        self.frame_count += 1
+
+        if self.player_hp <= 0:
+            if not self.final_time:
+                self.final_time = datetime.now() - self.start_time
+                self.game_ended = True
+            return
+
+        speed = 8
+        if self.up_pressed:
+            self.player_y += speed
+        if self.down_pressed:
+            self.player_y -= speed
+        if self.left_pressed:
+            self.player_x -= speed
+        if self.right_pressed:
+            self.player_x += speed
+
+        self.player_x = max(self.player_size, min(SCREEN_WIDTH - self.player_size, self.player_x))
+        self.player_y = max(self.player_size, min(SCREEN_HEIGHT - self.player_size, self.player_y))
+
+        if not self.teleport_active:
+            self.update_monsters()
+
+    def restart_game(self):
+        self.game_ended = False
+        self.game_paused = False
+        self.start_time = datetime.now()
+        self.final_time = None
+        self.player_x = 400
+        self.player_y = 300
+        self.player_hp = 100
+        self.kills = 0
+        self.frame_count = 0
+        self.teleport_active = False
+        self.teleport_animation = 0
+
+        self.up_pressed = False
+        self.down_pressed = False
+        self.left_pressed = False
+        self.right_pressed = False
+
+        self.monsters = [
+            {"x": 150, "y": 150, "alive": True, "size": 30, "hp": 120, "attack_timer": 0},
+            {"x": 650, "y": 150, "alive": True, "size": 30, "hp": 120, "attack_timer": 0},
+            {"x": 150, "y": 450, "alive": True, "size": 30, "hp": 120, "attack_timer": 0},
+            {"x": 650, "y": 450, "alive": True, "size": 30, "hp": 120, "attack_timer": 0},
+            {"x": 400, "y": 300, "alive": True, "size": 35, "hp": 150, "attack_timer": 0},
+        ]
+
+
+class BossFight(arcade.Window):
+    def __init__(self, start_time):
+        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, "Финальный Босс - ЭКСТРЕМАЛЬНЫЙ")
+
+        self.start_time = start_time
+        self.final_time = None
+        self.game_paused = False
+        self.game_ended = False
+
+        # Инициализация игрока
+        self.player_x = 400
+        self.player_y = 100
+        self.player_size = 30
+        self.player_hp = 150
+        self.player_max_hp = 150
+
+        # Инициализация босса
+        self.boss_x = SCREEN_WIDTH // 2
+        self.boss_y = SCREEN_HEIGHT // 2
+        self.boss_size = 40
+        self.boss_hp = 500
+        self.boss_max_hp = 500
+        self.boss_invulnerable = False
+
+        # Инициализация рук босса
+        self.hands = []
+        self.hand_length = 60
+        self.hand_width = 10
+
+        # Таймеры атак
+        self.attack_timer = 0
+        self.attack_interval = 90  # 1.5 секунды между атаками
+
+        # Счетчики и фазы
+        self.attack_counter = 0
+        self.special_phase_after_attacks = 3
+        self.attack_phase = "idle"
+        self.attack_duration = 0
+        self.special_phase_duration = 0
+        self.special_phase_max_duration = 150
+
+        # Опасные зоны
+        self.danger_points = []
+        self.danger_point_warnings = []
+        self.danger_point_timer = 0
+        self.danger_point_interval = 10
+        self.warning_duration = 45
+
+        # Секторы для рук
+        self.hand_sectors = [
+            (1, 60), (61, 120), (121, 180),
+            (181, 240), (241, 300), (301, 360)
+        ]
+
+        # Таймеры контакта с руками
+        self.hand_contact_timers = {}
+
+        # Флаги для движения рук
+        self.hands_moving = False
+        self.hands_movement_timer = 0
+        self.hands_movement_duration = 90  # 1.5 секунды движения рук
+
+        # Управление
+        self.up_pressed = False
+        self.down_pressed = False
+        self.left_pressed = False
+        self.right_pressed = False
+
+    def setup(self):
+        # Инициализация рук
+        for i in range(6):
+            start_angle, end_angle = self.hand_sectors[i]
+            angle = random.randint(start_angle, end_angle)
+            self.hands.append({
+                "angle": math.radians(angle),
+                "target_angle": math.radians(angle),
+                "warning_timer": 0,
+                "attacking": False,
+                "attack_timer": 0,
+                "speed_multiplier": 0.75,  # На 25% медленнее
+                "current_angle": math.radians(angle),  # Текущий угол для плавного движения
+                "move_progress": 0.0,  # Прогресс движения от 0 до 1
+                "is_moving": False  # Флаг движения руки
+            })
+
+    def on_draw(self):
+        self.clear()
+
+        # Фон
+        background_points = [
+            (0, 0), (SCREEN_WIDTH, 0),
+            (SCREEN_WIDTH, SCREEN_HEIGHT), (0, SCREEN_HEIGHT)
+        ]
+        arcade.draw_polygon_filled(background_points, arcade.color.DARK_SLATE_GRAY)
+
+        # Предупреждения опасных точек
+        for warning in self.danger_point_warnings:
+            if warning["active"]:
+                pulse_size = warning["size"] * (warning["timer"] / self.warning_duration)
+                arcade.draw_circle_filled(warning["x"], warning["y"], pulse_size, (255, 255, 0))
+
+        # Опасные точки
+        for point in self.danger_points:
+            if point["active"]:
+                pulse_size = point["size"] + 8 * math.sin(point["timer"] * 0.3)
+                arcade.draw_circle_filled(point["x"], point["y"], pulse_size, (255, 50, 50))
+
+        # Босс
+        if self.boss_invulnerable:
+            pulse = 8 * math.sin(self.special_phase_duration * 0.3)
+            arcade.draw_circle_filled(self.boss_x, self.boss_y, self.boss_size + pulse, (200, 50, 50))
+        else:
+            arcade.draw_circle_filled(self.boss_x, self.boss_y, self.boss_size, arcade.color.DARK_RED)
+
+        # Руки (если не в особой фазе)
+        if self.attack_phase != "special_phase":
+            for i, hand in enumerate(self.hands):
+                # Используем текущий угол для отрисовки (для плавного движения)
+                current_angle = hand["current_angle"]
+
+                x1 = self.boss_x + math.cos(current_angle) * self.hand_length
+                y1 = self.boss_y + math.sin(current_angle) * self.hand_length
+                x2 = x1 + math.cos(current_angle) * self.hand_length
+                y2 = y1 + math.sin(current_angle) * self.hand_length
+
+                # Выбор цвета в зависимости от состояния
+                if hand["warning_timer"] > 0:
+                    color = (255, 200, 0)
+                    # Прозрачная линия предупреждения
+                    arcade.draw_line(x2, y2, x2 + math.cos(current_angle) * 300,
+                                     y2 + math.sin(current_angle) * 300, (255, 255, 0, 150), 25)
+                elif hand["attacking"]:
+                    color = (255, 255, 100)
+                    # Луч атаки
+                    arcade.draw_line(x2, y2, x2 + math.cos(current_angle) * 400,
+                                     y2 + math.sin(current_angle) * 400, color, 25)
+                else:
+                    # Разный цвет в зависимости от того, движется ли рука
+                    if hand["is_moving"]:
+                        color = (180, 100, 80)  # Темнее при движении
+                    else:
+                        color = (220, 80, 60)  # Обычный цвет
+
+                # Отрисовка руки
+                arcade.draw_line(self.boss_x, self.boss_y, x1, y1, color, self.hand_width)
+                arcade.draw_circle_filled(x1, y1, 12, color)
+                arcade.draw_line(x1, y1, x2, y2, color, self.hand_width - 2)
+                arcade.draw_circle_filled(x2, y2, 10, color)
+
+        # Игрок
+        half = self.player_size / 2
+        points = [
+            (self.player_x - half, self.player_y - half),
+            (self.player_x + half, self.player_y - half),
+            (self.player_x + half, self.player_y + half),
+            (self.player_x - half, self.player_y + half),
+        ]
+        arcade.draw_polygon_filled(points, arcade.color.GREEN)
+
+        # Интерфейс
+        self.draw_interface()
+
+    def draw_interface(self):
+        # Время игры
+        if not self.game_ended:
+            current_time = datetime.now()
+            elapsed = current_time - self.start_time
+            elapsed_str = str(elapsed).split('.')[0]
+        else:
+            if self.final_time:
+                elapsed_str = str(self.final_time).split('.')[0]
+            else:
+                elapsed_str = "00:00:00"
+
+        arcade.draw_text(f"Общее время: {elapsed_str}", 20, SCREEN_HEIGHT - 220, arcade.color.WHITE, 16)
+
+        # Здоровье игрока
+        hp_width = 200 * (self.player_hp / self.player_max_hp)
+        hp_points = [
+            (20, SCREEN_HEIGHT - 40),
+            (20 + hp_width, SCREEN_HEIGHT - 40),
+            (20 + hp_width, SCREEN_HEIGHT - 20),
+            (20, SCREEN_HEIGHT - 20),
+        ]
+        arcade.draw_polygon_filled(hp_points, arcade.color.RED)
+        arcade.draw_polygon_outline(hp_points, arcade.color.BLACK, 2)
+        arcade.draw_text(f"Игрок: {int(self.player_hp)}/{self.player_max_hp}", 20, SCREEN_HEIGHT - 60,
+                         arcade.color.WHITE, 18)
+
+        # Здоровье босса
+        boss_hp_width = 300 * (self.boss_hp / self.boss_max_hp)
+        boss_hp_points = [
+            (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT - 40),
+            (SCREEN_WIDTH // 2 - 150 + boss_hp_width, SCREEN_HEIGHT - 40),
+            (SCREEN_WIDTH // 2 - 150 + boss_hp_width, SCREEN_HEIGHT - 20),
+            (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT - 20),
+        ]
+        boss_color = arcade.color.PURPLE if self.boss_invulnerable else arcade.color.DARK_RED
+        arcade.draw_polygon_filled(boss_hp_points, boss_color)
+        arcade.draw_polygon_outline(boss_hp_points, arcade.color.BLACK, 2)
+
+        boss_hp_text = f"БОСС: {int(self.boss_hp)}/{self.boss_max_hp}"
+        if self.boss_invulnerable:
+            boss_hp_text += " (НЕУЯЗВИМ)"
+        arcade.draw_text(boss_hp_text, SCREEN_WIDTH // 2, SCREEN_HEIGHT - 60, arcade.color.WHITE, 24, anchor_x="center")
+
+        # Информация
+        arcade.draw_text(f"Атак до особой фазы: {self.special_phase_after_attacks - self.attack_counter}",
+                         SCREEN_WIDTH // 2, SCREEN_HEIGHT - 90, arcade.color.CYAN, 16, anchor_x="center")
+
+        if self.attack_phase == "moving":
+            time_left = self.hands_movement_duration - self.hands_movement_timer
+            arcade.draw_text(f"Руки двигаются! Приготовьтесь! Осталось: {time_left / 60:.1f} сек",
+                             SCREEN_WIDTH // 2, 100, arcade.color.ORANGE, 20, anchor_x="center")
+        elif self.attack_phase == "warning":
+            arcade.draw_text("ВНИМАНИЕ! Сейчас будет выстрел!", SCREEN_WIDTH // 2, 100, arcade.color.YELLOW, 20,
+                             anchor_x="center")
+        elif self.attack_phase == "attacking":
+            arcade.draw_text("АТАКА! Уклоняйтесь от лучей и рук!", SCREEN_WIDTH // 2, 100, arcade.color.RED, 20,
+                             anchor_x="center")
+        elif self.attack_phase == "special_warning":
+            arcade.draw_text("ОСОБАЯ ФАЗА! Руки исчезают!", SCREEN_WIDTH // 2, 100, arcade.color.PURPLE, 24,
+                             anchor_x="center")
+        elif self.attack_phase == "special_phase":
+            time_left = self.special_phase_max_duration - self.special_phase_duration
+            arcade.draw_text(f"ОСОБАЯ ФАЗА! Избегайте красных точек! Осталось: {time_left / 60:.1f} сек",
+                             SCREEN_WIDTH // 2, 100, arcade.color.PURPLE, 20, anchor_x="center")
+
+        if self.attack_phase == "idle":
+            time_to_attack = max(0, (self.attack_interval - self.attack_timer) // 60)
+            arcade.draw_text(f"Следующая атака через: {time_to_attack:.1f} сек", SCREEN_WIDTH // 2, 70,
+                             arcade.color.CYAN, 16, anchor_x="center")
+
+        # Экран окончания
+        if self.player_hp <= 0 or self.boss_hp <= 0:
+            self.draw_game_over_screen()
+
+        # Пауза
+        if self.game_paused:
+            self.draw_pause_screen()
+
+    def draw_game_over_screen(self):
+        text_bg_points = [
+            (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 100),
+            (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 - 100),
+            (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 + 100),
+            (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + 100),
+        ]
+        arcade.draw_polygon_filled(text_bg_points, arcade.color.BLACK)
+
+        if self.player_hp <= 0:
+            arcade.draw_text("ПОРАЖЕНИЕ!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 40, arcade.color.RED, 36,
+                             anchor_x="center")
+            arcade.draw_text("R - рестарт босса, ESC - выход", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
+                             arcade.color.WHITE, 20, anchor_x="center")
+        elif self.boss_hp <= 0:
+            arcade.draw_text("ПОБЕДА НАД БОССОМ!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 40,
+                             arcade.color.GOLD, 36, anchor_x="center")
+            arcade.draw_text("Вы прошли игру!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
+                             arcade.color.WHITE, 24, anchor_x="center")
+            arcade.draw_text("ESC - выход", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50,
+                             arcade.color.YELLOW, 20, anchor_x="center")
+
+    def draw_pause_screen(self):
+        pause_bg_points = [
+            (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 80),
+            (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 - 80),
+            (SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2 + 80),
+            (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + 80),
+        ]
+        arcade.draw_polygon_filled(pause_bg_points, (0, 0, 0, 200))
+        arcade.draw_text("ИГРА ПРИОСТАНОВЛЕНА", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30,
+                         arcade.color.WHITE, 32, anchor_x="center")
+        arcade.draw_text("P - продолжить", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30,
+                         arcade.color.YELLOW, 24, anchor_x="center")
+
+    def on_key_press(self, key, modifiers):
+        if key == arcade.key.P:
+            self.game_paused = not self.game_paused
+            return
+
+        if self.game_paused:
+            return
+
+        if self.player_hp <= 0 or self.boss_hp <= 0:
+            if key == arcade.key.R:
+                self.restart_boss_fight()
+            elif key == arcade.key.ESCAPE:
+                arcade.close_window()
+            return
+
+        if key == arcade.key.UP:
+            self.up_pressed = True
+        elif key == arcade.key.DOWN:
+            self.down_pressed = True
+        elif key == arcade.key.LEFT:
+            self.left_pressed = True
+        elif key == arcade.key.RIGHT:
+            self.right_pressed = True
+        elif key == arcade.key.SPACE:
+            self.player_attack()
+        elif key == arcade.key.R:
+            self.restart_boss_fight()
+        elif key == arcade.key.ESCAPE:
+            arcade.close_window()
+
+    def on_key_release(self, key, modifiers):
+        if self.game_paused:
+            return
+
+        if key == arcade.key.UP:
+            self.up_pressed = False
+        elif key == arcade.key.DOWN:
+            self.down_pressed = False
+        elif key == arcade.key.LEFT:
+            self.left_pressed = False
+        elif key == arcade.key.RIGHT:
+            self.right_pressed = False
+
+    def player_attack(self):
+        if self.player_hp <= 0 or self.boss_hp <= 0 or self.boss_invulnerable:
+            return
+
+        attack_range = 80
+        distance_x = abs(self.player_x - self.boss_x)
+        distance_y = abs(self.player_y - self.boss_y)
+        distance = (distance_x ** 2 + distance_y ** 2) ** 0.5
+
+        if distance < attack_range + self.boss_size:
+            self.boss_hp -= 10
+            if self.boss_hp < 0:
+                self.boss_hp = 0
+
+    def update_hands(self):
+        for i, hand in enumerate(self.hands):
+            if hand["is_moving"]:
+                hand["move_progress"] += 0.008
+                if hand["move_progress"] >= 1.0:
+                    hand["move_progress"] = 1.0
+                    hand["is_moving"] = False
+                    hand["angle"] = hand["target_angle"]
+                    hand["current_angle"] = hand["target_angle"]
+                else:
+                    start_angle = hand.get("start_angle", hand["angle"])
+                    hand["current_angle"] = start_angle + (hand["target_angle"] - start_angle) * hand["move_progress"]
+            else:
+                hand["current_angle"] = hand["angle"]
+
+            if hand["warning_timer"] > 0:
+                hand["warning_timer"] -= 1
+                if hand["warning_timer"] <= 0:
+                    hand["attacking"] = True
+                    hand["attack_timer"] = 75
+
+            if hand["attack_timer"] > 0:
+                hand["attack_timer"] -= 1
+                if hand["attack_timer"] <= 0:
+                    hand["attacking"] = False
+
+            if hand["attacking"] and self.player_hp > 0:
+                current_angle = hand["current_angle"]
+                x1 = self.boss_x + math.cos(current_angle) * self.hand_length * 2
+                y1 = self.boss_y + math.sin(current_angle) * self.hand_length * 2
+                ray_dir_x = math.cos(current_angle)
+                ray_dir_y = math.sin(current_angle)
+
+                player_to_ray_x = self.player_x - x1
+                player_to_ray_y = self.player_y - y1
+                projection = player_to_ray_x * ray_dir_x + player_to_ray_y * ray_dir_y
+
+                if projection > 0:
+                    closest_x = x1 + ray_dir_x * projection
+                    closest_y = y1 + ray_dir_y * projection
+                    distance = ((self.player_x - closest_x) ** 2 + (self.player_y - closest_y) ** 2) ** 0.5
+
+                    if distance < self.player_size + 20:
+                        self.player_hp -= 8
+                        if self.player_hp < 0:
+                            self.player_hp = 0
+
+            if not hand["attacking"] and self.player_hp > 0:
+                current_angle = hand["current_angle"]
+                x1 = self.boss_x + math.cos(current_angle) * self.hand_length
+                y1 = self.boss_y + math.sin(current_angle) * self.hand_length
+                x2 = x1 + math.cos(current_angle) * self.hand_length
+                y2 = y1 + math.sin(current_angle) * self.hand_length
+
+                hand_segments = [
+                    (self.boss_x, self.boss_y, x1, y1),
+                    (x1, y1, x2, y2)
+                ]
+
+                for seg_x1, seg_y1, seg_x2, seg_y2 in hand_segments:
+                    seg_dx = seg_x2 - seg_x1
+                    seg_dy = seg_y2 - seg_y1
+                    seg_length = math.sqrt(seg_dx ** 2 + seg_dy ** 2)
+
+                    if seg_length > 0:
+                        seg_nx = seg_dx / seg_length
+                        seg_ny = seg_dy / seg_length
+                        to_player_x = self.player_x - seg_x1
+                        to_player_y = self.player_y - seg_y1
+                        projection = to_player_x * seg_nx + to_player_y * seg_ny
+                        projection = max(0, int(min(seg_length, projection)))
+                        closest_x = seg_x1 + seg_nx * projection
+                        closest_y = seg_y1 + seg_ny * projection
+                        distance = math.sqrt((self.player_x - closest_x) ** 2 + (self.player_y - closest_y) ** 2)
+
+                        if distance < self.player_size + self.hand_width:
+                            hand_key = f"hand_{i}"
+                            if hand_key not in self.hand_contact_timers:
+                                self.hand_contact_timers[hand_key] = 0
+
+                            if self.hand_contact_timers[hand_key] <= 0:
+                                self.player_hp -= 5
+                                if self.player_hp < 0:
+                                    self.player_hp = 0
+                                self.hand_contact_timers[hand_key] = 30
+
+        for key in list(self.hand_contact_timers.keys()):
+            self.hand_contact_timers[key] -= 1
+            if self.hand_contact_timers[key] <= 0:
+                del self.hand_contact_timers[key]
+
+    def update_danger_points(self):
+        for warning in self.danger_point_warnings[:]:
+            warning["timer"] += 1
+            if warning["timer"] >= self.warning_duration:
+                self.danger_points.append({
+                    "x": warning["x"],
+                    "y": warning["y"],
+                    "size": 30,
+                    "timer": 0,
+                    "active": True,
+                    "duration": 75
+                })
+                self.danger_point_warnings.remove(warning)
+
+        self.danger_point_timer += 1
+        if self.danger_point_timer >= self.danger_point_interval:
+            self.danger_point_timer = 0
+            x = random.randint(50, SCREEN_WIDTH - 50)
+            y = random.randint(50, SCREEN_HEIGHT - 50)
+            self.danger_point_warnings.append({
+                "x": x,
+                "y": y,
+                "size": 40,
+                "timer": 0,
+                "active": True
+            })
+
+        for point in self.danger_points[:]:
+            point["timer"] += 1
+            point["duration"] -= 1
+
+            if point["active"] and self.player_hp > 0:
+                distance = ((self.player_x - point["x"]) ** 2 + (self.player_y - point["y"]) ** 2) ** 0.5
+                if distance < self.player_size + point["size"]:
+                    self.player_hp -= 4
+                    if self.player_hp < 0:
+                        self.player_hp = 0
+
+            if point["duration"] <= 0:
+                self.danger_points.remove(point)
+
+    def start_attack(self):
+        self.attack_phase = "moving"
+        self.hands_movement_timer = 0
+
+        for i, hand in enumerate(self.hands):
+            start_angle, end_angle = self.hand_sectors[i]
+            new_angle = random.randint(start_angle, end_angle)
+
+            hand["start_angle"] = hand["angle"]
+            hand["target_angle"] = math.radians(new_angle)
+            hand["move_progress"] = 0.0
+            hand["is_moving"] = True
+            hand["warning_timer"] = 0
+            hand["attacking"] = False
+
+    def start_special_phase(self):
+        self.attack_phase = "special_warning"
+        self.attack_duration = 30
+        self.boss_invulnerable = True
+        self.danger_point_warnings = []
+        self.danger_points = []
+
+    def on_update(self, delta_time):
+        if self.game_paused or self.game_ended:
+            return
+
+        if self.player_hp <= 0 or self.boss_hp <= 0:
+            if not self.final_time:
+                self.final_time = datetime.now() - self.start_time
+                self.game_ended = True
+            return
+
+        speed = 8
+        if self.up_pressed:
+            self.player_y += speed
+        if self.down_pressed:
+            self.player_y -= speed
+        if self.left_pressed:
+            self.player_x -= speed
+        if self.right_pressed:
+            self.player_x += speed
+
+        self.player_x = max(self.player_size, min(SCREEN_WIDTH - self.player_size, self.player_x))
+        self.player_y = max(self.player_size, min(SCREEN_HEIGHT - self.player_size, self.player_y))
+
+        if self.attack_phase != "special_phase":
+            self.update_hands()
+
+        if self.attack_phase == "special_phase":
+            self.update_danger_points()
+            self.special_phase_duration += 1
+
+            if self.special_phase_duration >= self.special_phase_max_duration:
+                self.attack_phase = "idle"
+                self.boss_invulnerable = False
+                self.danger_point_warnings = []
+                self.danger_points = []
+                self.special_phase_duration = 0
+                self.attack_counter = 0
+
+        if self.attack_phase == "idle":
+            self.attack_timer += 1
+            if self.attack_timer >= self.attack_interval:
+                self.start_attack()
+                self.attack_timer = 0
+
+        elif self.attack_phase == "moving":
+            self.hands_movement_timer += 1
+
+            if self.hands_movement_timer >= 90:
+                all_ready = True
+                for hand in self.hands:
+                    if hand["is_moving"]:
+                        all_ready = False
+                        break
+
+                if all_ready:
+                    self.attack_phase = "warning"
+                    self.attack_duration = 48
+
+                    for hand in self.hands:
+                        hand["warning_timer"] = 48
+
+        elif self.attack_phase == "warning":
+            self.attack_duration -= 1
+            if self.attack_duration <= 0:
+                self.attack_phase = "attacking"
+                self.attack_counter += 1
+
+                if self.attack_counter >= self.special_phase_after_attacks:
+                    self.start_special_phase()
+
+        elif self.attack_phase == "attacking":
+            all_done = True
+            for hand in self.hands:
+                if hand["attack_timer"] > 0:
+                    all_done = False
+                    break
+
+            if all_done:
+                self.attack_phase = "idle"
+
+        elif self.attack_phase == "special_warning":
+            self.attack_duration -= 1
+            if self.attack_duration <= 0:
+                self.attack_phase = "special_phase"
+                self.special_phase_duration = 0
+
+    def restart_boss_fight(self):
+        self.player_x = 400
+        self.player_y = 100
+        self.player_hp = 150
+        self.player_max_hp = 150
+
+        self.boss_hp = 500
+        self.boss_max_hp = 500
+        self.boss_invulnerable = False
+
+        self.attack_timer = 0
+        self.attack_phase = "idle"
+        self.attack_counter = 0
+        self.special_phase_duration = 0
+        self.hands_movement_timer = 0
+
+        self.danger_point_warnings = []
+        self.danger_points = []
+        self.hand_contact_timers = {}
+
+        self.hands = []
+        self.setup()
+
+        self.up_pressed = False
+        self.down_pressed = False
+        self.left_pressed = False
+        self.right_pressed = False
+
+
 def main():
     menu = MainMenu()
+    menu.center_window()
     arcade.run()
+
 
 if __name__ == "__main__":
     main()
