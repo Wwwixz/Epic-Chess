@@ -1,6 +1,7 @@
 import arcade
 import math
 import random
+import os
 from arcade.gui import UIManager, UIAnchorLayout, UIBoxLayout, UIFlatButton
 from datetime import datetime
 from PIL import Image
@@ -8,6 +9,7 @@ from PIL import Image
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 SCREEN_TITLE = "Epic Chess"
+
 
 class SimpleSprite:
     def __init__(self, center_x=0, center_y=0, texture=None, scale=1.0):
@@ -27,6 +29,7 @@ class SimpleSprite:
             arcade.draw_texture_rect(self.texture, rect, angle=self.angle)
         else:
             arcade.draw_circle_filled(self.center_x, self.center_y, 20, arcade.color.BLUE)
+
 
 class AnimatedSprite:
     def __init__(self, x, y, scale=1.0):
@@ -59,7 +62,8 @@ class AnimatedSprite:
                         if "hands" in base_path:
                             color = (200, 50, 100)
                         else:
-                            color = (150, 0, 0) if state == "idle" else (200, 0, 0) if state == "damage" else (255, 0, 0)
+                            color = (150, 0, 0) if state == "idle" else (200, 0, 0) if state == "damage" else (
+                            255, 0, 0)
                     else:
                         color = (100, 100, 100)
 
@@ -115,6 +119,7 @@ class AnimatedSprite:
         self.sprite.center_y = self.y
         self.sprite.draw()
 
+
 class MainMenu(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
@@ -126,6 +131,14 @@ class MainMenu(arcade.Window):
         self.anchor_layout.add(self.box_layout)
         self.manager.add(self.anchor_layout)
         self.game_start_time = None
+        self.background_music = None
+        self.music_player = None
+        self.music_volume = 0.5
+        self.background_texture = None
+        try:
+            self.background_texture = arcade.load_texture("assets/backgrounds/main_menu.png")
+        except:
+            pass
 
     def setup_widgets(self):
         start_button = UIFlatButton(text="Играть", width=200, height=50)
@@ -135,32 +148,70 @@ class MainMenu(arcade.Window):
         self.box_layout.add(start_button)
         self.box_layout.add(exit_button)
 
+    def on_show(self):
+        self.play_music("Menu")
+
+    def play_music(self, track_name):
+        try:
+            music_path = f"music/{track_name}.mp3"
+            if os.path.exists(music_path):
+                if self.background_music:
+                    self.background_music.stop(self.music_player)
+                self.background_music = arcade.load_sound(music_path, streaming=True)
+                self.music_player = self.background_music.play(self.music_volume, loop=True)
+        except Exception as e:
+            print(f"Ошибка музыки: {e}")
+
+    def stop_music(self):
+        if self.background_music and self.music_player:
+            self.background_music.stop(self.music_player)
+            self.background_music = None
+            self.music_player = None
+
     def on_start_click(self, event):
+        self.stop_music()
         self.close()
         self.game_start_time = datetime.now()
         game = Level1(self.game_start_time)
         game.center_window()
         game.setup()
+        game.play_music("Level1")
         arcade.run()
 
     def on_exit_click(self, event):
+        self.stop_music()
         arcade.close_window()
 
     def on_draw(self):
         self.clear()
-        rect = arcade.LBWH(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
-        arcade.draw_rect_filled(rect, arcade.color.LIGHT_GRAY)
-        arcade.draw_text("EPIC CHESS", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 80, arcade.color.DARK_BLUE, 48, anchor_x="center", bold=True)
-        arcade.draw_text("Управление в игре:", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 110, arcade.color.DARK_GRAY, 24, anchor_x="center")
-        arcade.draw_text("Стрелки - движение", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 150, arcade.color.DARK_GRAY, 18, anchor_x="center")
-        arcade.draw_text("Пробел - атака", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 170, arcade.color.DARK_GRAY, 18, anchor_x="center")
-        arcade.draw_text("ENTER - начать игру", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 190, arcade.color.DARK_GRAY, 18, anchor_x="center")
-        arcade.draw_text("R - рестарт, ESC - выход", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 210, arcade.color.DARK_GRAY, 18, anchor_x="center")
+        if self.background_texture:
+            rect = arcade.LBWH(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+            arcade.draw_texture_rect(self.background_texture, rect)
+        else:
+            rect = arcade.LBWH(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+            arcade.draw_rect_filled(rect, arcade.color.LIGHT_GRAY)
+
+        overlay_rect = arcade.LBWH(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+        arcade.draw_rect_filled(overlay_rect, (0, 0, 0, 100))
+
+        arcade.draw_text("EPIC CHESS", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 80, arcade.color.GOLD, 48, anchor_x="center",
+                         bold=True)
+        arcade.draw_text("Управление в игре:", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 110, arcade.color.WHITE, 24,
+                         anchor_x="center")
+        arcade.draw_text("Стрелки - движение", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 150, arcade.color.WHITE, 18,
+                         anchor_x="center")
+        arcade.draw_text("Пробел - атака", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 170, arcade.color.WHITE, 18,
+                         anchor_x="center")
+        arcade.draw_text("ENTER - начать игру", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 190, arcade.color.WHITE, 18,
+                         anchor_x="center")
+        arcade.draw_text("R - главное меню, ESC - выход", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 210, arcade.color.WHITE,
+                         18, anchor_x="center")
         self.manager.draw()
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.ENTER:
             self.on_start_click(None)
+
 
 class Level1(arcade.Window):
     def __init__(self, start_time):
@@ -213,6 +264,26 @@ class Level1(arcade.Window):
 
         self.kills = 0
         self.frame_count = 0
+        self.background_music = None
+        self.music_player = None
+        self.music_volume = 0.5
+
+    def play_music(self, track_name):
+        try:
+            music_path = f"music/{track_name}.mp3"
+            if os.path.exists(music_path):
+                if self.background_music and self.music_player:
+                    self.background_music.stop(self.music_player)
+                self.background_music = arcade.load_sound(music_path, streaming=True)
+                self.music_player = self.background_music.play(self.music_volume, loop=True)
+        except Exception as e:
+            print(f"Ошибка музыки: {e}")
+
+    def stop_music(self):
+        if self.background_music and self.music_player:
+            self.background_music.stop(self.music_player)
+            self.background_music = None
+            self.music_player = None
 
     def setup(self):
         self.player_sprite.load_textures("assets/sprites/player", {"idle": 1, "run": 8, "attack": 6})
@@ -252,7 +323,8 @@ class Level1(arcade.Window):
             self.teleport_animation += 1
             pulse = abs(20 * (self.teleport_animation % 60 - 30) / 30)
             arcade.draw_circle_filled(self.teleport_x, self.teleport_y, self.teleport_size + pulse, arcade.color.PURPLE)
-            arcade.draw_circle_outline(self.teleport_x, self.teleport_y, self.teleport_size + pulse + 5, arcade.color.BLACK, 3)
+            arcade.draw_circle_outline(self.teleport_x, self.teleport_y, self.teleport_size + pulse + 5,
+                                       arcade.color.BLACK, 3)
             for i in range(8):
                 angle = self.teleport_animation * 0.1 + i * math.pi / 4
                 x1 = self.teleport_x + (self.teleport_size + pulse) * math.cos(angle)
@@ -280,23 +352,30 @@ class Level1(arcade.Window):
         arcade.draw_text(f"Уровень: {self.level}", 20, SCREEN_HEIGHT - 115, (0, 100, 255), 18)
 
         if self.teleport_active:
-            arcade.draw_text("Подойдите к телепорту", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40, arcade.color.PURPLE, 24, anchor_x="center")
+            arcade.draw_text("Подойдите к телепорту", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40, arcade.color.PURPLE, 24,
+                             anchor_x="center")
 
         if self.player_hp <= 0:
-            game_over_rect = arcade.LBWH(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 60, 400, 120)
+            game_over_rect = arcade.LBWH(SCREEN_WIDTH // 2 - 300, SCREEN_HEIGHT // 2 - 100, 400, 150)
             arcade.draw_rect_filled(game_over_rect, arcade.color.BLACK)
             arcade.draw_rect_outline(game_over_rect, arcade.color.WHITE, 2)
-            arcade.draw_text("ВЫ ПРОИГРАЛИ!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20, arcade.color.RED, 36, anchor_x="center")
-            arcade.draw_text(f"Убито монстров: {self.kills}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20, arcade.color.WHITE, 24, anchor_x="center")
-            arcade.draw_text(f"Время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 45, arcade.color.WHITE, 20, anchor_x="center")
-            arcade.draw_text("R - начать заново", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 70, arcade.color.YELLOW, 20, anchor_x="center")
+            arcade.draw_text("ВЫ ПРОИГРАЛИ!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20, arcade.color.RED, 36,
+                             anchor_x="center")
+            arcade.draw_text(f"Убито монстров: {self.kills}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
+                             arcade.color.WHITE, 24, anchor_x="center")
+            arcade.draw_text(f"Время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 45, arcade.color.WHITE,
+                             20, anchor_x="center")
+            arcade.draw_text("R - главное меню", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 70, arcade.color.YELLOW, 20,
+                             anchor_x="center")
 
         if self.game_paused:
             pause_rect = arcade.LBWH(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 80, 400, 160)
             arcade.draw_rect_filled(pause_rect, (0, 0, 0, 200))
             arcade.draw_rect_outline(pause_rect, arcade.color.YELLOW, 2)
-            arcade.draw_text("ИГРА ПРИОСТАНОВЛЕНА", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30, arcade.color.WHITE, 32, anchor_x="center")
-            arcade.draw_text("P - продолжить", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30, arcade.color.YELLOW, 24, anchor_x="center")
+            arcade.draw_text("ИГРА ПРИОСТАНОВЛЕНА", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30, arcade.color.WHITE, 32,
+                             anchor_x="center")
+            arcade.draw_text("P - продолжить", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30, arcade.color.YELLOW, 24,
+                             anchor_x="center")
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.P:
@@ -308,9 +387,12 @@ class Level1(arcade.Window):
             return
         if self.game_paused:
             return
+        if key == arcade.key.R:
+            self.return_to_main_menu()
+            return
         if self.player_hp <= 0:
             if key == arcade.key.R:
-                self.restart_game()
+                self.return_to_main_menu()
             return
         if key == arcade.key.UP:
             self.up_pressed = True
@@ -323,8 +405,6 @@ class Level1(arcade.Window):
         elif key == arcade.key.SPACE:
             if not self.player_attacking:
                 self.player_attack()
-        elif key == arcade.key.R:
-            self.restart_game()
         elif key == arcade.key.ESCAPE:
             arcade.close_window()
 
@@ -368,7 +448,8 @@ class Level1(arcade.Window):
             self.spawn_teleport()
 
     def spawn_teleport(self):
-        possible_locations = [(100, 100), (SCREEN_WIDTH - 100, 100), (100, SCREEN_HEIGHT - 100), (SCREEN_WIDTH - 100, SCREEN_HEIGHT - 100)]
+        possible_locations = [(100, 100), (SCREEN_WIDTH - 100, 100), (100, SCREEN_HEIGHT - 100),
+                              (SCREEN_WIDTH - 100, SCREEN_HEIGHT - 100)]
         self.teleport_x, self.teleport_y = random.choice(possible_locations)
         self.teleport_active = True
         self.teleport_animation = 0
@@ -473,48 +554,29 @@ class Level1(arcade.Window):
         if not self.teleport_active:
             self.update_monsters()
         else:
-            distance_to_teleport = ((self.player_x - self.teleport_x) ** 2 + (self.player_y - self.teleport_y) ** 2) ** 0.5
+            distance_to_teleport = ((self.player_x - self.teleport_x) ** 2 + (
+                        self.player_y - self.teleport_y) ** 2) ** 0.5
             if distance_to_teleport < self.teleport_size + 20:
                 self.go_to_level2()
 
     def go_to_level2(self):
+        self.stop_music()
         self.final_time = datetime.now() - self.start_time
         self.game_ended = True
         self.close()
         level2 = Level2(self.start_time)
         level2.center_window()
         level2.setup()
+        level2.play_music("Level2")
         arcade.run()
 
-    def restart_game(self):
-        self.game_ended = False
-        self.game_paused = False
-        self.start_time = datetime.now()
-        self.final_time = None
-        self.player_x = 400
-        self.player_y = 300
-        self.player_hp = 100
-        self.player_attacking = False
-        self.player_attack_frame = 0
-        self.kills = 0
-        self.frame_count = 0
-        self.teleport_active = False
-        self.teleport_animation = 0
-        self.up_pressed = False
-        self.down_pressed = False
-        self.left_pressed = False
-        self.right_pressed = False
-        self.player_sprite.set_state("idle", True)
-        self.monsters = []
-        monster_positions = [(200, 300), (600, 300), (400, 100), (400, 500)]
-        for pos in monster_positions:
-            monster = {
-                "x": pos[0], "y": pos[1], "alive": True,
-                "hp": 80, "max_hp": 80, "attack_timer": 180,
-                "sprite": AnimatedSprite(pos[0], pos[1], scale=0.8)
-            }
-            monster["sprite"].load_textures("assets/sprites/monsters/level1", {"idle": 1, "run": 6, "attack": 4})
-            self.monsters.append(monster)
+    def return_to_main_menu(self):
+        self.stop_music()
+        self.close()
+        menu = MainMenu()
+        menu.center_window()
+        arcade.run()
+
 
 class Level2(arcade.Window):
     def __init__(self, start_time):
@@ -575,6 +637,26 @@ class Level2(arcade.Window):
 
         self.kills = 0
         self.frame_count = 0
+        self.background_music = None
+        self.music_player = None
+        self.music_volume = 0.5
+
+    def play_music(self, track_name):
+        try:
+            music_path = f"music/{track_name}.mp3"
+            if os.path.exists(music_path):
+                if self.background_music and self.music_player:
+                    self.background_music.stop(self.music_player)
+                self.background_music = arcade.load_sound(music_path, streaming=True)
+                self.music_player = self.background_music.play(self.music_volume, loop=True)
+        except Exception as e:
+            print(f"Ошибка музыки: {e}")
+
+    def stop_music(self):
+        if self.background_music and self.music_player:
+            self.background_music.stop(self.music_player)
+            self.background_music = None
+            self.music_player = None
 
     def setup(self):
         self.player_sprite.load_textures("assets/sprites/player", {"idle": 1, "run": 8, "attack": 6})
@@ -584,7 +666,8 @@ class Level2(arcade.Window):
 
     def create_rooks(self):
         self.rooks = []
-        rook1 = {"x": -100, "y": SCREEN_HEIGHT - 170, "speed": 5, "direction": 1, "active": True, "damage_cooldown": 0, "sprite": AnimatedSprite(-100, SCREEN_HEIGHT - 170, scale=1.2)}
+        rook1 = {"x": -100, "y": SCREEN_HEIGHT - 170, "speed": 5, "direction": 1, "active": True, "damage_cooldown": 0,
+                 "sprite": AnimatedSprite(-100, SCREEN_HEIGHT - 170, scale=1.2)}
         try:
             rook1["sprite"].load_textures("assets/sprites/monsters/level2/rook1", {"run": 8})
         except:
@@ -604,7 +687,8 @@ class Level2(arcade.Window):
                 rook1["sprite"].sprite.texture = texture
         rook1["sprite"].set_state("run", True)
 
-        rook2 = {"x": SCREEN_WIDTH + 100, "y": 170, "speed": 5, "direction": -1, "active": True, "damage_cooldown": 0, "sprite": AnimatedSprite(SCREEN_WIDTH + 100, 170, scale=1.2)}
+        rook2 = {"x": SCREEN_WIDTH + 100, "y": 170, "speed": 5, "direction": -1, "active": True, "damage_cooldown": 0,
+                 "sprite": AnimatedSprite(SCREEN_WIDTH + 100, 170, scale=1.2)}
         try:
             rook2["sprite"].load_textures("assets/sprites/monsters/level2/rook2", {"run": 8})
         except:
@@ -642,15 +726,19 @@ class Level2(arcade.Window):
                 bishop["sprite"].draw()
                 if bishop["hp"] < bishop["max_hp"]:
                     hp_width = bishop["size"] * (bishop["hp"] / bishop["max_hp"])
-                    hp_rect = arcade.LBWH(bishop["x"] - bishop["size"] / 2, bishop["y"] + bishop["size"] + 15 - 2.5, hp_width, 5)
+                    hp_rect = arcade.LBWH(bishop["x"] - bishop["size"] / 2, bishop["y"] + bishop["size"] + 15 - 2.5,
+                                          hp_width, 5)
                     arcade.draw_rect_filled(hp_rect, arcade.color.GREEN)
-                    border_rect = arcade.LBWH(bishop["x"] - bishop["size"] / 2, bishop["y"] + bishop["size"] + 15 - 2.5, bishop["size"], 5)
+                    border_rect = arcade.LBWH(bishop["x"] - bishop["size"] / 2, bishop["y"] + bishop["size"] + 15 - 2.5,
+                                              bishop["size"], 5)
                     arcade.draw_rect_outline(border_rect, arcade.color.BLACK, 1)
                 if bishop["attack_timer"] < 108:
                     attack_width = bishop["size"] * ((108 - bishop["attack_timer"]) / 108)
-                    attack_rect = arcade.LBWH(bishop["x"] - bishop["size"] / 2, bishop["y"] + bishop["size"] + 25 - 2.5, attack_width, 5)
+                    attack_rect = arcade.LBWH(bishop["x"] - bishop["size"] / 2, bishop["y"] + bishop["size"] + 25 - 2.5,
+                                              attack_width, 5)
                     arcade.draw_rect_filled(attack_rect, arcade.color.YELLOW)
-                    attack_border_rect = arcade.LBWH(bishop["x"] - bishop["size"] / 2, bishop["y"] + bishop["size"] + 25 - 2.5, bishop["size"], 5)
+                    attack_border_rect = arcade.LBWH(bishop["x"] - bishop["size"] / 2,
+                                                     bishop["y"] + bishop["size"] + 25 - 2.5, bishop["size"], 5)
                     arcade.draw_rect_outline(attack_border_rect, arcade.color.BLACK, 1)
 
         for rook in self.rooks:
@@ -665,7 +753,8 @@ class Level2(arcade.Window):
             self.teleport_animation += 1
             pulse = abs(20 * (self.teleport_animation % 60 - 30) / 30)
             arcade.draw_circle_filled(self.teleport_x, self.teleport_y, self.teleport_size + pulse, arcade.color.PURPLE)
-            arcade.draw_circle_outline(self.teleport_x, self.teleport_y, self.teleport_size + pulse + 5, arcade.color.BLACK, 3)
+            arcade.draw_circle_outline(self.teleport_x, self.teleport_y, self.teleport_size + pulse + 5,
+                                       arcade.color.BLACK, 3)
             for i in range(8):
                 angle = self.teleport_animation * 0.1 + i * math.pi / 4
                 x1 = self.teleport_x + (self.teleport_size + pulse) * math.cos(angle)
@@ -693,26 +782,34 @@ class Level2(arcade.Window):
         arcade.draw_text(f"Уровень: {self.level}", 20, SCREEN_HEIGHT - 115, (0, 100, 255), 18)
 
         if self.teleport_active:
-            arcade.draw_text("Подойдите к телепорту", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40, arcade.color.PURPLE, 24, anchor_x="center")
+            arcade.draw_text("Подойдите к телепорту", SCREEN_WIDTH // 2, SCREEN_HEIGHT - 40, arcade.color.PURPLE, 24,
+                             anchor_x="center")
 
         if self.player_hp <= 0:
             game_over_rect = arcade.LBWH(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 60, 400, 120)
             arcade.draw_rect_filled(game_over_rect, arcade.color.BLACK)
             arcade.draw_rect_outline(game_over_rect, arcade.color.WHITE, 2)
-            arcade.draw_text("ВЫ ПРОИГРАЛИ!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20, arcade.color.RED, 36, anchor_x="center")
-            arcade.draw_text(f"Убито монстров: {self.kills}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20, arcade.color.WHITE, 24, anchor_x="center")
-            arcade.draw_text(f"Время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 45, arcade.color.WHITE, 20, anchor_x="center")
-            arcade.draw_text("R - начать заново", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 70, arcade.color.YELLOW, 20, anchor_x="center")
+            arcade.draw_text("ВЫ ПРОИГРАЛИ!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20, arcade.color.RED, 36,
+                             anchor_x="center")
+            arcade.draw_text(f"Убито монстров: {self.kills}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20,
+                             arcade.color.WHITE, 24, anchor_x="center")
+            arcade.draw_text(f"Время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 45, arcade.color.WHITE,
+                             20, anchor_x="center")
+            arcade.draw_text("R - главное меню", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 70, arcade.color.YELLOW, 20,
+                             anchor_x="center")
 
         if self.game_paused:
             pause_rect = arcade.LBWH(SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 80, 400, 160)
             arcade.draw_rect_filled(pause_rect, (0, 0, 0, 200))
             arcade.draw_rect_outline(pause_rect, arcade.color.YELLOW, 2)
-            arcade.draw_text("ИГРА ПРИОСТАНОВЛЕНА", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30, arcade.color.WHITE, 32, anchor_x="center")
-            arcade.draw_text("P - продолжить", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30, arcade.color.YELLOW, 24, anchor_x="center")
+            arcade.draw_text("ИГРА ПРИОСТАНОВЛЕНА", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30, arcade.color.WHITE, 32,
+                             anchor_x="center")
+            arcade.draw_text("P - продолжить", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30, arcade.color.YELLOW, 24,
+                             anchor_x="center")
 
         if self.teleport_active and all(not bishop["alive"] for bishop in self.bishops):
-            distance_to_teleport = ((self.player_x - self.teleport_x) ** 2 + (self.player_y - self.teleport_y) ** 2) ** 0.5
+            distance_to_teleport = ((self.player_x - self.teleport_x) ** 2 + (
+                        self.player_y - self.teleport_y) ** 2) ** 0.5
             if distance_to_teleport < self.teleport_size + 20:
                 self.show_victory()
 
@@ -720,14 +817,18 @@ class Level2(arcade.Window):
         if not self.final_time:
             self.final_time = datetime.now() - self.start_time
             self.game_ended = True
-        victory_rect = arcade.LBWH(SCREEN_WIDTH // 2 - 250, SCREEN_HEIGHT // 2 - 100, 500, 200)
+        victory_rect = arcade.LBWH(SCREEN_WIDTH // 2 - 310, SCREEN_HEIGHT // 2 - 100, 620, 200)
         arcade.draw_rect_filled(victory_rect, arcade.color.DARK_BLUE)
         arcade.draw_rect_outline(victory_rect, arcade.color.GOLD, 3)
-        arcade.draw_text("ПОБЕДА!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50, arcade.color.GOLD, 48, anchor_x="center", bold=True)
-        arcade.draw_text("Нажмите SPACE для финального босса", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2, arcade.color.WHITE, 28, anchor_x="center")
+        arcade.draw_text("ПОБЕДА!", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50, arcade.color.GOLD, 48,
+                         anchor_x="center", bold=True)
+        arcade.draw_text("Нажмите SPACE для финального босса", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2,
+                         arcade.color.WHITE, 28, anchor_x="center")
         elapsed_str = str(self.final_time).split('.')[0] if self.final_time else "00:00:00"
-        arcade.draw_text(f"Общее время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 40, arcade.color.YELLOW, 24, anchor_x="center")
-        arcade.draw_text("R - начать заново", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80, arcade.color.GREEN, 22, anchor_x="center")
+        arcade.draw_text(f"Общее время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 40, arcade.color.YELLOW,
+                         24, anchor_x="center")
+        arcade.draw_text("R - главное меню", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80, arcade.color.GREEN, 22,
+                         anchor_x="center")
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.P:
@@ -739,14 +840,19 @@ class Level2(arcade.Window):
             return
         if self.game_paused:
             return
+        if key == arcade.key.R:
+            self.return_to_main_menu()
+            return
         if self.player_hp <= 0 or self.game_ended:
             if key == arcade.key.R:
-                self.restart_game()
+                self.return_to_main_menu()
             elif key == arcade.key.SPACE and self.game_ended and all(not bishop["alive"] for bishop in self.bishops):
+                self.stop_music()
                 self.close()
                 boss_fight = BossFight(self.start_time)
                 boss_fight.center_window()
                 boss_fight.setup()
+                boss_fight.play_music("Level3")
                 arcade.run()
             return
         if key == arcade.key.UP:
@@ -760,8 +866,6 @@ class Level2(arcade.Window):
         elif key == arcade.key.SPACE:
             if not self.player_attacking:
                 self.player_attack()
-        elif key == arcade.key.R:
-            self.restart_game()
         elif key == arcade.key.ESCAPE:
             arcade.close_window()
 
@@ -805,7 +909,8 @@ class Level2(arcade.Window):
             self.spawn_teleport()
 
     def spawn_teleport(self):
-        possible_locations = [(100, 100), (SCREEN_WIDTH - 100, 100), (100, SCREEN_HEIGHT - 100), (SCREEN_WIDTH - 100, SCREEN_HEIGHT - 100)]
+        possible_locations = [(100, 100), (SCREEN_WIDTH - 100, 100), (100, SCREEN_HEIGHT - 100),
+                              (SCREEN_WIDTH - 100, SCREEN_HEIGHT - 100)]
         self.teleport_x, self.teleport_y = random.choice(possible_locations)
         self.teleport_active = True
         self.teleport_animation = 0
@@ -829,7 +934,8 @@ class Level2(arcade.Window):
                 rook["sprite"].update_position(rook["x"], rook["y"])
                 if rook["damage_cooldown"] > 0:
                     rook["damage_cooldown"] -= 1
-                if (rook["direction"] == 1 and rook["x"] > SCREEN_WIDTH + 150) or (rook["direction"] == -1 and rook["x"] < -150):
+                if (rook["direction"] == 1 and rook["x"] > SCREEN_WIDTH + 150) or (
+                        rook["direction"] == -1 and rook["x"] < -150):
                     rooks_to_remove.append(i)
         for i in sorted(rooks_to_remove, reverse=True):
             if i < len(self.rooks):
@@ -965,41 +1071,12 @@ class Level2(arcade.Window):
         if not self.teleport_active:
             self.update_bishops()
 
-    def restart_game(self):
-        self.game_ended = False
-        self.game_paused = False
-        self.start_time = datetime.now()
-        self.final_time = None
-        self.player_x = 400
-        self.player_y = 300
-        self.player_hp = 100
-        self.player_attacking = False
-        self.player_attack_frame = 0
-        self.kills = 0
-        self.frame_count = 0
-        self.teleport_active = False
-        self.teleport_animation = 0
-        self.rooks_timer = 0
-        self.up_pressed = False
-        self.down_pressed = False
-        self.left_pressed = False
-        self.right_pressed = False
-        self.player_sprite.set_state("idle", True)
-        self.bishops = []
-        bishop_positions = [(150, 150), (650, 150), (150, 450), (650, 450), (400, 300)]
-        bishop_sizes = [30, 30, 30, 30, 35]
-        bishop_hps = [156, 156, 156, 156, 195]
-        for i, pos in enumerate(bishop_positions):
-            bishop = {
-                "x": pos[0], "y": pos[1], "alive": True,
-                "hp": bishop_hps[i], "max_hp": bishop_hps[i],
-                "attack_timer": 108, "size": bishop_sizes[i],
-                "sprite": AnimatedSprite(pos[0], pos[1], scale=0.9 if i < 4 else 1.0)
-            }
-            bishop["sprite"].load_textures("assets/sprites/monsters/level2/bishop", {"idle": 1, "run": 6, "attack": 4})
-            self.bishops.append(bishop)
-        self.rooks = []
-        self.create_rooks()
+    def return_to_main_menu(self):
+        self.stop_music()
+        self.close()
+        menu = MainMenu()
+        menu.center_window()
+        arcade.run()
 
 
 class BossFight(arcade.Window):
@@ -1066,6 +1143,40 @@ class BossFight(arcade.Window):
         self.down_pressed = False
         self.left_pressed = False
         self.right_pressed = False
+        self.background_music = None
+        self.music_player = None
+        self.music_volume = 0.5
+        self.victory_music_played = False
+        self.defeat_music_played = False
+
+    def play_music(self, track_name):
+        try:
+            music_path = f"music/{track_name}.mp3"
+            if os.path.exists(music_path):
+                if self.background_music and self.music_player:
+                    self.background_music.stop(self.music_player)
+                self.background_music = arcade.load_sound(music_path, streaming=True)
+                self.music_player = self.background_music.play(self.music_volume, loop=True)
+        except Exception as e:
+            print(f"Ошибка музыки: {e}")
+
+    def stop_music(self):
+        if self.background_music and self.music_player:
+            self.background_music.stop(self.music_player)
+            self.background_music = None
+            self.music_player = None
+
+    def play_victory_music(self):
+        if not self.victory_music_played:
+            self.stop_music()
+            self.play_music("Win")
+            self.victory_music_played = True
+
+    def play_defeat_music(self):
+        if not self.defeat_music_played:
+            self.stop_music()
+            self.play_music("Lose")
+            self.defeat_music_played = True
 
     def setup(self):
         self.player_sprite.load_textures("assets/sprites/player", {"idle": 1, "run": 8, "attack": 6})
@@ -1249,7 +1360,7 @@ class BossFight(arcade.Window):
                              anchor_x="center")
         arcade.draw_text(f"Время: {elapsed_str}", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20, arcade.color.WHITE, 24,
                          anchor_x="center")
-        arcade.draw_text("R - начать заново", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50, arcade.color.YELLOW, 20,
+        arcade.draw_text("R - главное меню", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50, arcade.color.YELLOW, 20,
                          anchor_x="center")
 
     def draw_pause_screen(self):
@@ -1267,9 +1378,12 @@ class BossFight(arcade.Window):
             return
         if self.game_paused:
             return
+        if key == arcade.key.R:
+            self.return_to_main_menu()
+            return
         if self.player_hp <= 0 or self.victory_achieved:
             if key == arcade.key.R:
-                self.restart_boss_fight()
+                self.return_to_main_menu()
             return
         if key == arcade.key.UP:
             self.up_pressed = True
@@ -1282,8 +1396,6 @@ class BossFight(arcade.Window):
         elif key == arcade.key.SPACE:
             if not self.player_attacking:
                 self.player_attack()
-        elif key == arcade.key.R:
-            self.restart_boss_fight()
         elif key == arcade.key.ESCAPE:
             arcade.close_window()
 
@@ -1558,6 +1670,11 @@ class BossFight(arcade.Window):
         if self.game_paused or self.game_ended:
             return
 
+        if self.player_hp <= 0 and not self.defeat_music_played:
+            self.play_defeat_music()
+        elif self.victory_achieved and not self.victory_music_played:
+            self.play_victory_music()
+
         if self.death_phase_active:
             self.special_phase_duration += 1
             if self.special_phase_duration >= self.special_phase_max_duration:
@@ -1694,54 +1811,19 @@ class BossFight(arcade.Window):
                     self.attack_phase = "special_phase"
                     self.special_phase_duration = 0
 
-    def restart_boss_fight(self):
-        self.game_ended = False
-        self.game_paused = False
-        self.final_time = None
-        self.player_x = 400
-        self.player_y = 100
-        self.player_hp = 120
-        self.player_max_hp = 120
-        self.player_attacking = False
-        self.player_attack_frame = 0
-        self.player_damage_dealt = False
-        self.player_invulnerable = False
-        self.player_invulnerable_timer = 0
-        self.boss_x = SCREEN_WIDTH // 2
-        self.boss_y = SCREEN_HEIGHT // 2
-        self.boss_hp = 500
-        self.boss_max_hp = 500
-        self.boss_invulnerable = False
-        self.death_phase_active = False
-        self.victory_achieved = False
-        self.attack_timer = 0
-        self.attack_phase = "idle"
-        self.attack_counter = 0
-        self.attack_duration = 0
-        self.special_phase_duration = 0
-        self.danger_point_timer = 0
-        self.danger_point_interval = 30
-        self.danger_point_warnings = []
-        self.danger_points = []
-        self.explosions = []
-        self.hands = []
-        self.hand_textures = []
-        self.setup()
-        self.player_sprite.set_state("idle", True)
-        self.boss_sprite.set_state("idle")
-        self.player_sprite.update_position(self.player_x, self.player_y)
-        self.boss_sprite.update_position(self.boss_x, self.boss_y)
-        self.up_pressed = False
-        self.down_pressed = False
-        self.left_pressed = False
-        self.right_pressed = False
-        self.start_time = datetime.now()
+    def return_to_main_menu(self):
+        self.stop_music()
+        self.close()
+        menu = MainMenu()
+        menu.center_window()
+        arcade.run()
 
 
 def main():
     menu = MainMenu()
     menu.center_window()
     arcade.run()
+
 
 if __name__ == "__main__":
     main()
